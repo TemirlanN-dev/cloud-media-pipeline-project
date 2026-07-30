@@ -1,4 +1,5 @@
 import os
+import psycopg2
 import boto3
 import ffmpeg
 
@@ -35,11 +36,31 @@ def process_video(input_bucket, output_bucket, object_key):
         s3.upload_file(upload_path, output_bucket, processed_key)
         print("Processing and upload complete!")
 
+        # 5. Database Update (Inside the try block, so it only runs if upload succeeds)
+        print("Video uploaded! Updating database status to Completed...")
+        try:
+            # Connect to the database
+            conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+            cur = conn.cursor()
+            
+            # Update the record where the input_key matches
+            cur.execute(
+                "UPDATE jobs SET status = 'Completed' WHERE input_key = %s", 
+                (object_key,)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+            print("Database updated successfully!")
+            
+        except Exception as db_error:
+            print(f"Failed to update database: {db_error}")
+
     except Exception as e:
         print(f"CRITICAL ERROR processing video: {e}")
 
     finally:
-        # 5. Clean up local container storage (Prevent memory leaks)
+        # 6. Clean up local container storage (Prevent memory leaks)
         print("Cleaning up temporary files...")
         if os.path.exists(download_path):
             os.remove(download_path)
