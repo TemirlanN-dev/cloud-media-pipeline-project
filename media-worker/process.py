@@ -2,6 +2,7 @@ import os
 import psycopg2
 import boto3
 import ffmpeg
+import time
 
 # Initialize S3 Client (It automatically reads your AWS credentials from your environment)
 s3 = boto3.client('s3')
@@ -19,9 +20,12 @@ def process_video(input_bucket, output_bucket, object_key):
         # 2. Download the raw video from the S3 Input Bucket
         print(f"Downloading {object_key} from {input_bucket}...")
         s3.download_file(input_bucket, object_key, download_path)
+        input_size_mb = os.path.getsize(download_path) / (1024 * 1024)
+        print(f"METRIC: Input file size: {input_size_mb:.2f} MB")
 
         # 3. Process with FFmpeg (Scale to 720p)
         print("Processing video to 720p...")
+        start_time = time.time()
         (
             ffmpeg
             .input(download_path)
@@ -30,6 +34,12 @@ def process_video(input_bucket, output_bucket, object_key):
             .overwrite_output()
             .run(quiet=True)
         )
+        end_time = time.time()
+        process_duration = end_time - start_time
+        print(f"METRIC: Transcoding complete in {process_duration:.2f} seconds.")
+        
+        output_size_mb = os.path.getsize(upload_path) / (1024 * 1024)
+        print(f"METRIC: Output file size: {output_size_mb:.2f} MB")
 
         # 4. Upload the processed video to the S3 Output Bucket
         print(f"Uploading {processed_key} to {output_bucket}...")
